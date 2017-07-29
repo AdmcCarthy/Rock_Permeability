@@ -1,0 +1,339 @@
+---
+title: "Exploration of Petroleum Rock Samples"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+Dataset consists of four variables.
+Of these permeability could be thought of as a dependent variable.
+
+[,1]	area	area of pores space, in pixels out of 256 by 256
+[,2]	peri	perimeter in pixels
+[,3]	shape	perimeter/sqrt(area)
+[,4]	perm	permeability in milli-Darcies
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load dependancies
+library(ggplot2)
+library(ggthemes)
+library(scales)
+library(extRemes)
+library(sm)
+library(gridExtra)
+library(GGally)
+```
+
+```{r echo=FALSE}
+# Get data
+help(rock)
+data(rock)
+
+# Create a new categorical variable for quality
+rock['perm_c'] <- ifelse(rock$perm <= 300, "low", "permeabale")
+```
+
+  Descriptive Statistics
+```{r echo=FALSE}
+# Descriptive Statistics
+summary(rock)
+```
+
+```{r echo=FALSE, Multiplot_function}
+# Entirely taken from:
+# http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+
+Summary of dataset highlights the distribution of the data.
+
+```{r echo=FALSE, U2, fig.height = 3, fig.width = 5, fig.align="center"}
+small_hist <- function(data_v, name, scale, df=rock) {
+plt <- ggplot(data = df, aes(data_v)) + 
+  geom_histogram(bins = 30,
+                 col = "white",
+                 fill = "#9099A2"
+                 ) +
+  theme_tufte() +
+  labs(
+    title = name
+    ) +
+  labs(
+    x = scale,
+    y = "Count"
+    )
+
+return(plt)
+}
+
+plt1 <- small_hist(rock$area, "Area of pore space", "Out of 256 by 256")
+plt2 <- small_hist(rock$peri, "Perimeter", "Pixels")
+plt3 <- small_hist(rock$shape, "Shape", "perimeter/sqrt(area)")
+plt4 <- small_hist(rock$perm, "Permeability", "milli-Darcies")
+multiplot(plt1, plt2, plt3, plt4, cols = 2)
+```
+
+Histogram of area.
+
+```{r echo=FALSE, QQ_2, fig.height = 5, fig.width = 5, fig.align="center"}
+qqnorm(rock$peri) 
+qqline(rock$peri)
+```
+
+The
+
+```{r echo=FALSE, QQ_3, fig.height = 5, fig.width = 5, fig.align="center"}
+qqnorm(rock$area)
+qqline(rock$area)
+```
+
+The
+
+```{r echo=FALSE, QQ_4, fig.height = 5, fig.width = 5, fig.align="center"}
+qqnorm(rock$shape)
+qqline(rock$shape)
+```
+
+```{r echo=FALSE, QQ_5, fig.height = 5, fig.width = 5, fig.align="center"}
+qqnorm(rock$perm)
+qqline(rock$perm)
+```
+
+The
+
+```{r echo=FALSE, BPlots, fig.height = 5, fig.width = 4, fig.align="center"}
+freq_poly <-  function(x_v, name, scale, 
+                       dataset=rock, group=rock$perm_c) {
+plt <- qplot(x = x_v, data = dataset,
+             geom = 'freqpoly', 
+             color = group,
+             bins = 15) +
+  scale_x_continuous() +
+  theme_tufte() +
+  labs(
+    title = name
+    ) +
+  labs(
+    x = scale
+      )
+plt + scale_color_manual(values = c('#0B3C5D', '#D9B310'))
+}
+
+pb1 <- freq_poly(rock$area, "Area of pore space", "pixels 256*256")
+pb2 <- freq_poly(rock$peri, "Total perimeter of pores", "pixels")
+pb3 <- freq_poly(rock$shape, "Shape", "Perimiter/sqrt(area)")
+
+multiplot(pb1, pb2, pb3, cols = 1)
+```
+
+The
+
+```{r echo=FALSE, freq_pair_plot, fig.height = 9, fig.width = 9, message=FALSE, warning=FALSE,}
+ggpairs(rock,
+        title = "Rock sample pair plot"
+        ) +
+  theme_minimal()
+```
+
+The
+
+```{r echo=FALSE, scatter_den, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$area, y = rock$peri),
+       data = rock) +
+  geom_point(alpha = 0.2,
+             position = position_jitter(),
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Area vs Perimeter",
+    x = "pixels 256*256",
+    y = "pixels"
+    ) +
+  geom_smooth(method = 'lm', formula = y~x,
+              colour = '#192231')
+```
+
+The
+
+```{r echo=FALSE, scatter_den2, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$area, y = rock$shape),
+       data = rock) +
+  geom_point(alpha = 0.2,
+             position = position_jitter(),
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Area vs Shape of Pore Space",
+    x = "pixels 256*256",
+    y = "Perimiter/sqrt(area)"
+    ) +
+  geom_smooth(method = 'lm', formula = y~x,
+              colour = '#192231')
+```
+
+The
+
+```{r echo=FALSE, scatter_den3, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$peri, y = rock$shape),
+       data = rock) +
+  geom_point(alpha = 0.2,
+             position = position_jitter(),
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Perimieter vs Shape of Pore Space",
+    x = "pixels",
+    y = "Perimiter/sqrt(area)"
+    ) +
+  geom_smooth(method = 'lm', formula = y~x,
+              colour = '#192231')
+```
+
+```{r echo=FALSE, scatter_den4, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$peri, y = rock$perm),
+       data = rock) +
+  geom_point(alpha = 0.2,
+             position = position_jitter(),
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Perimieter vs Permeability",
+    x = "pixels",
+    y = "milli-Darcies"
+    ) +
+  geom_smooth(method = 'lm', formula = y~x,
+              colour = '#192231')
+```
+
+The
+
+```{r echo=FALSE, scatter_den5, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$shape, y = rock$perm),
+       data = rock) +
+  geom_point(alpha = 0.2,
+             position = position_jitter(),
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Pore shape vs Permeability",
+    x = "Perimiter/sqrt(area)",
+    y = "milli-Darcies"
+    ) +
+  geom_smooth(method = 'lm', formula = y~x,
+              colour = '#192231')
+```
+
+The
+
+```{r echo=FALSE, scatter_den6, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$area, y = rock$perm),
+       data = rock) +
+  geom_point(alpha = 0.2,
+             position = position_jitter(),
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Area of pore space vs Permeability",
+    x = "pixels, 256*256",
+    y = "milli-Darcies"
+    ) +
+  geom_smooth(method = 'lm', formula = y~x,
+              colour = '#192231')
+```
+
+The
+
+```{r echo=FALSE, Multivariate_Plots_7, fig.height = 5, fig.width = 8}
+plt_mv7 <- ggplot(aes(
+  x = (rock$area/rock$shape),
+  y = (rock$peri)
+  ),
+       data = rock) +
+  geom_point(alpha = 0.01,
+             position = position_jitter()
+             ) +
+  theme_tufte() +
+  labs(
+    title = "Attempting to seperate permeability groups",
+    x = "",
+    y = ""
+    )
+fnl_plt_4 <- plt_mv7 + geom_point(aes(size = (perm)), 
+                                  pch = 21, 
+                                  show.legend = T,
+                                  alpha = 0.5) + 
+  aes(fill = factor(perm_c))
+fnl_plt_4
+```
+
+The
+
+```{r echo=FALSE, qq2, fig.height = 8, fig.width = 8}
+rock['disc'] <- (rock$area/
+           rock$area)/rock$peri
+
+fnl_2 <- function() {
+  qqplot((rock[rock$perm_c == "permeabale", ]$disc),
+  (rock[rock$perm_c == "low", ]$disc), 
+  pch = 1, 
+  xlab = "", 
+  ylab = "", 
+  regress = TRUE,
+  main = 'Group QQ plot',
+  bty = 'n',  # Frame style
+  col = alpha('#192231', 0.3),  # transparency with col
+  cex = .4,  # scale pof points
+  col.axis = '#9099A2',
+  col.lab = '#9099A2',
+  col.main = '#192231',
+  make.plot = TRUE)
+}
+
+fnl_2()
+```
+
+The
