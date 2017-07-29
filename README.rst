@@ -7,7 +7,7 @@ Exploratory Data Analysis of Rock Permeability
 Getting Started
 ---------------
 
-See the `report <>`_ for the full analysis.
+See the `report <https://admccarthy.github.io/Rock_Permeability/>`_ for the full analysis.
 
 .. image:: docs\images\Seperate_permeability_groups.png
    :scale: 100 %
