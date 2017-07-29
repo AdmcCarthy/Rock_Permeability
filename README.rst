@@ -18,7 +18,7 @@ Dataset
 Data taken from the `rock R Dataset Package <https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/00Index.html>`_
 
 This gives an easily accessible open source package, however there is limited information
-about the source of data and infromation about the variables.
+about the source of the data or infromation about the variables.
 
 Source:
 
