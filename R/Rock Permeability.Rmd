@@ -1,0 +1,520 @@
+---
+title: "Exploration of Petroleum Rock Samples"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+*Adam McCarthy*
+
+Exploratory data analysis of rock core barrel scans and their permeability. 
+
+Data-set consists of four variables.
+Of these permeability could be thought of as a dependent variable.
+While the other variables are assumed to be independent.
+
+* area = area of pores space, in pixels out of 256 by 256
+*	peri = perimeter in pixels
+*	shape = perimeter/sqrt(area)
+*	perm = permeability in milli-Darcies
+
+There is little information about these variables
+and data-set.
+
+Either this was from microscopy or CT scans of the
+cross-sections of core.
+
+The source information is:
+
+> Data from BP Research, image analysis by Ronit Katz, U. Oxford.
+
+The details state that information comes from 12 core samples
+with 4 cross-sections taken.
+
+4 cross sections from 12 cores give 48 samples.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load dependancies
+library(ggplot2)
+library(ggthemes)
+library(scales)
+library(extRemes)
+library(sm)
+library(gridExtra)
+library(GGally)
+```
+
+```{r echo=FALSE}
+# Get data
+help(rock)
+data(rock)
+
+# Create a new categorical variable for quality
+rock['perm_c'] <- ifelse(rock$perm <= 300, "low", "permeabale")
+```
+
+#### Descriptive Statistics
+```{r echo=FALSE}
+# Descriptive Statistics
+summary(rock)
+```
+
+The summary of the data-set highlights the distribution of the data. 
+The data consist
+of four original variables and one categorical variable created based on
+a permeability cut-off of 300mD (milli-Darcies). The categorical variable
+is to highlight the difference between relatively poor ("low") and better
+("permeable") reservoir.
+
+All original variables are numeric.
+
+Area of pore space is measured out of pixels of 256 by 256. This gives
+a total number of pixels of 65536. So the maximum value has pore space
+of ~19% compared to non-pore space. Following this approach
+a new variable is calculated to give area as a percentage as this is
+easier to comprehend.
+
+The perimeter would count the geometric boundary of the
+pore space in pixels. There is no information present to convert
+this into a measurement.
+
+Shape would reflect some information about the shape of the pore
+space. No information is at hand other than it is perimeter/sqrt(area)
+
+Permeability has very low values at it´s minimum of 6.3 mD up to a max
+of 1300mD.
+
+#### Checking data
+```{r echo=FALSE, new_var, fig.height = 5, fig.width = 5}
+# Area percentage by converting total number of pixels
+# into the relative number of pixels compared to
+# 256*256.
+rock['area_perc'] <- (rock$area/65536)
+```
+
+```{r echo=FALSE, var_check, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$shape, y = (rock$peri/sqrt(rock$area))),
+       data = rock) +
+  geom_point(alpha = 0.2,
+             position = position_jitter(),
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Check on shape",
+    x = "Shape perimeter/sqrt(area)",
+    y = "Variables (perimeter/sqrt(area))"
+    ) +
+  geom_smooth(method = 'lm', formula = y~x,
+              colour = '#192231')
+```
+
+The first plot is made to check what the shape variable is based on.
+In the notes it is described as perimeter/sqrt(area) but when plotted against
+this axis they do not correlate. If the shape variable was a derivative of
+area and perimeter then this would be a matching along a straight line.
+
+This would imply that shape has been calculated on each individual pore
+rather than the sum for each cross-section, which is what is at hand.
+
+The ratio would suggest that for the same perimeter larger pores would
+have lower values. While if the perimeter was larger for the same pore
+area the value would be larger.
+
+Circular pores with an even shape would have larger pore area compared
+to perimeter so would have lower values. While highly irregular geometric
+shapes would have a longer perimeter for their area given higher values.
+
+The tricky thing here is we are dealing with the sum of these
+values for the cross section. So this is an aggregate of all these values.
+
+#### Uni-varaite analysis
+```{r echo=FALSE, Multiplot_function}
+# Entirely taken from:
+# http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+
+```{r echo=FALSE, U2, fig.height = 3, fig.width = 5, fig.align="center"}
+small_hist <- function(data_v, name, scale, df=rock) {
+plt <- ggplot(data = df, aes(data_v)) + 
+  geom_histogram(bins = 20,
+                 col = "white",
+                 fill = "#9099A2"
+                 ) +
+  theme_tufte() +
+  labs(
+    title = name
+    ) +
+  labs(
+    x = scale,
+    y = "Count"
+    )
+
+return(plt)
+}
+
+plt1 <- small_hist(rock$area_perc, "Area of pore space", "%")
+plt2 <- small_hist(rock$peri, "Perimeter", "Pixels")
+plt3 <- small_hist(rock$shape, "Shape", "pores perimeter/sqrt(area)")
+plt4 <- small_hist(rock$perm, "Permeability", "milli-Darcies")
+multiplot(plt1, plt2, plt3, plt4, cols = 2)
+```
+
+Histogram better represent the distribution of values. Given 48 samples only 20 bins have been
+used. 
+
+The Area of pore space shows an apparent normal distribution.
+
+Shape shows a skewed distribution.
+
+Perimeter shows a bi modal distribution.
+
+Permeability shows a large group of values close to 0 and then
+groups of bars above 500mD. A cut-off of 300mD has been used as
+an arbitary number to seperate between low and high values.
+
+```{r echo=FALSE, QQ_2, fig.height = 5, fig.width = 5, fig.align="center"}
+qqnorm(rock$peri) 
+qqline(rock$peri)
+```
+
+Checking perimeter in a QQ plot highlights the bi modal distribution.
+Given the sparse number of samples the confidence bands highlight that
+it may still be sourced from a normal distribution.
+
+```{r echo=FALSE, QQ_3, fig.height = 5, fig.width = 5, fig.align="center"}
+qqnorm(rock$area_perc)
+qqline(rock$area_perc)
+```
+
+Area of pore space does show a normal distribution, one with a number of clusters
+in this data-set.
+
+```{r echo=FALSE, QQ_4, fig.height = 5, fig.width = 5, fig.align="center"}
+qqnorm(rock$shape)
+qqline(rock$shape)
+```
+
+Shape shows it skews to the right, it intersects the confidence interval
+suggesting that even with this number of data points it is unlikely 
+it is sourced from a normal distribution.
+
+All of these observations, however, should be treated with caution, we are
+dealing with 12 core samples, perhaps from a very similar setting. This
+does not mean these observations may be relevant for a broader sample or the
+population of values.
+
+#### Bi-variate analysis
+```{r echo=FALSE, BPlots, fig.height = 5, fig.width = 4, fig.align="center"}
+freq_poly <-  function(x_v, name, scale, 
+                       dataset=rock, group=rock$perm_c) {
+plt <- qplot(x = x_v, data = dataset,
+             geom = 'freqpoly', 
+             color = group,
+             bins = 15) +
+  scale_x_continuous() +
+  theme_tufte() +
+  labs(
+    title = name
+    ) +
+  labs(
+    x = scale
+      )
+plt + scale_color_manual(values = c('#0B3C5D', '#D9B310'))
+}
+
+pb1 <- freq_poly(rock$area_perc, "Area of pore space", "%")
+pb2 <- freq_poly(rock$peri, "Total perimeter of pores", "pixels")
+pb3 <- freq_poly(rock$shape, "Shape", "Pores perimiter/sqrt(area)")
+
+multiplot(pb1, pb2, pb3, cols = 1)
+```
+
+Using the categorical variable separating permeability each variable shows
+some relationship to permeability.
+
+The first plot shows spikes where there are fewer permeable samples with
+an increase in pore area. This in counter-intuitive as an initial perspective
+would be more pore space would lead to more permeability.
+
+The second plot suggests that the total length of pore perimeter has a
+strong relationship to the two bi modal peaks of perimeter. In which permeable
+reservoirs have a lower total perimeter.
+
+The final plot showing the shape variable gives lower values 
+as having low permeability.
+These would be the more uniform circular geometries. More irregular geometries
+would give some of the permeable results but there are also low values here
+as well.
+
+```{r echo=FALSE, freq_pair_plot, fig.height = 9, fig.width = 9, message=FALSE, warning=FALSE,}
+ggpairs(rock,
+        title = "Rock sample pair plot"
+        ) +
+  theme_minimal()
+```
+
+The most correlated variables are area and perimeter (0.82).
+
+Permeability shows correlations to all three variables with -0.74
+to perimeter being the strongest.
+
+```{r echo=FALSE, scatter_den, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$area_perc, y = rock$peri),
+       data = rock) +
+  geom_point(alpha = 0.5,
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Area vs Perimeter",
+    x = "%",
+    y = "pixels"
+    ) +
+  geom_smooth(method = 'lm', formula = y~x,
+              colour = '#192231')
+```
+
+Area compared to perimeter has the highest correlation of 0.82, the plot
+of these two variables highlights this falls into two clusters.
+Overall it suggests a larger area has a larger overall perimeter length
+which would make sense.
+
+```{r echo=FALSE, scatter_den2, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$area_perc, y = rock$shape),
+       data = rock) +
+  geom_point(alpha = 0.5,
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Area vs Shape of Pore Space",
+    x = "%",
+    y = "Pores perimiter/sqrt(area)"
+    ) +
+  geom_smooth(method = 'lm', formula = y~x,
+              colour = '#192231')
+```
+
+Area compared to shape does not show any clear correlations. Different
+sums for pore shape geometry can occur for different total areas.
+
+```{r echo=FALSE, scatter_den3, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$peri, y = rock$shape),
+       data = rock) +
+  geom_point(alpha = 0.5,
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Perimieter vs Shape of Pore Space",
+    x = "pixels",
+    y = "Perimiter/sqrt(area)"
+    ) +
+  geom_smooth(method = 'lm', formula = y~x,
+              colour = '#192231')
+```
+
+Perimeter of pore space compared to the shape gives two clusters along
+the x axis (perimeter) each having a range of shapes.
+
+```{r echo=FALSE, scatter_den4, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$peri, y = factor(rock$perm)),
+       data = rock) +
+  geom_point(alpha = 0.8,
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Perimieter vs Permeability",
+    x = "pixels",
+    y = "milli-Darcies"
+    )
+```
+
+Starting to compare the variables to the dependent permeability perimeter
+had the highest correlation. The two clusters in perimeter appear to
+relate to to different trends in permeability. With lower perimeter lengths
+relating to higher permeability.
+
+```{r echo=FALSE, scatter_den5, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$shape, y = factor(rock$perm)),
+       data = rock) +
+  geom_point(alpha = 0.8,
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Pore shape vs Permeability",
+    x = "Pores perimiter/sqrt(area)",
+    y = "milli-Darcies"
+    )
+```
+
+Pore shape compared to permeability suggest that the highest values of
+pore shape are often associated to higher permeability with one outlier.
+There is a lot of overlap in pore shape values and the range of permeability.
+
+```{r echo=FALSE, scatter_den6, fig.height = 5, fig.width = 5}
+ggplot(aes(x = rock$area_perc, y = factor(rock$perm)),
+       data = rock) +
+  geom_point(alpha = 0.8,
+             color = '#192231') +
+  theme_tufte() +
+  labs(
+    title = "Area of pore space vs Permeability",
+    x = "%",
+    y = "milli-Darcies"
+    )
+```
+
+Area of pore space shows a confusing plot with each value of permeability
+having a range of pore areas. Often highest pore area has lowest permeability.
+
+#### Multi-variate analysis
+```{r echo=FALSE, Multivariate_Plots_7, fig.height = 5, fig.width = 8}
+plt_mv7 <- ggplot(aes(
+  x = (rock$area_perc/rock$shape),
+  y = (rock$peri)
+  ),
+       data = rock) +
+  geom_point(alpha = 0.01,
+             position = position_jitter()
+             ) +
+  theme_tufte() +
+  labs(
+    title = "Attempting to seperate permeability groups",
+    x = "Area % / Shape",
+    y = "Perimiter (pixels)"
+    )
+fnl_plt_4 <- plt_mv7 + geom_point(aes(size = (perm)), 
+                                  pch = 21, 
+                                  show.legend = T,
+                                  alpha = 0.6) + 
+  aes(fill = factor(perm_c))
+fnl_plt_4
+```
+
+After struggling to find strong relationships between individual variables and
+permeability this leads to multi-variate analysis. Using two variables as
+ratios compared to a third variable will allow to explore if it is possible
+to separate out different permeability groups. As perimeter has the
+strongest relationship to permeability this is kept on one axis while
+area and shape are combined into a ratio for the x axis.
+
+The figure shows the best visual representation of separating the low and
+permeable intervals. This plot suggests, for this data-set, that relatively
+lower perimeter values strongly separate permeable reservoir units.
+
+The combination of pore area and pore shape further help separate out this
+trend. Lower values of this ratio equate to lower pore area and more irregular
+pore geometries.
+
+This is the trends apparent in this data-set, however, these observations
+are counter intuitive. The greater the pore area, with longer pore perimeters
+would be associated with being easier for fluids to flow through.
+Less interfacial tension between grains and thus higher
+permeability values.
+
+It could relate to micro vs. macro pore space as permeability is controlled
+by macro pore space rather than micro. Given that all these values are sums
+for the cross section if micro pore spaces are included this could be creating
+the greater area values and greater perimeter values. Furthermore, the
+irregular pore space being associated with more permeable layers may reflect
+this trend with micro-pores being typically more uniform. So if the sample
+is dominated by macro pores, perhaps this is reflected in the sum of the
+pore shape values.
+
+This could be a reflection of local conditions from where these cores are
+taken from. For example carbonate compared to siliciclastic depositional
+settings.
+
+Diagenesis, chemical alterations during burial of sediments can lead to fibrous
+growths (e.g. illite cement) between pore spaces which can have dramatic
+effects on permeability while retaining large pore spaces.
+
+Without further information about the local conditions of each core sample
+it is not possible to take this assessment any further. The observations
+presented here should not be generalized to other similar data-sets.
+
+```{r echo=FALSE, Multivariate_Plots_8, fig.height = 6, fig.width = 9}
+plt_mv8 <- ggplot(aes(
+  x = (rock$area_perc/rock$shape),
+  y = (rock$peri)),
+       data = rock) +
+  geom_point(alpha = 0.1,
+             position = position_jitter()
+             ) +
+  theme_minimal() +
+  labs(
+    title = "Comparing key variables to permeability",
+    x = "Area/Shape",
+    y = "Perimeter"
+    )
+plt_mv8 <- plt_mv8  + facet_wrap(~ factor(perm))
+plt_mv8 <- plt_mv8 + geom_point(aes(size = log10(perm)), 
+                     pch = 21,
+                     show.legend = T) + 
+  aes(fill = factor(perm), alpha = 0.6)
+plt_mv8
+```
+
+The final plot separates out all of the permeability values, this also
+highlights that there are only 12 measurements of permeability out of all
+48 samples. This reflects that each core likely only has one permeability
+measurement. So even though there are 48 samples there are only 12 samples
+of permeability. Based on this assumption the above plot shows each
+core and their four values.
+
+Each of these plots shows a certain grouping but there is variance in the
+values of each cross-section within each core. There is less variation
+in perimeter (y axis) compared to the range in the x axis (Area/Shape).
+
+A few of the cores break this observation, for example 950mD has a range of
+perimeter values.
+
+From 142mD up to 1300mD the change in perimeter values can be seen. 
+Area/shape has less of a consistent trend, i.e. as permeability increases
+there is not a consistent relationship. This would suggest it is not possible
+to take this analysis further than separating permeable from lower permeability
+samples. If the threshold for this categorical value is changed to < 140mD 
+instead of 300mD the relationship would be stronger.
